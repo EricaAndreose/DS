@@ -1,5 +1,5 @@
 from sqlite3 import connect
-from pandas import read_sql, DataFrame, concat, read_csv, Series
+from pandas import read_sql, DataFrame, concat, read_csv, Series, merge
 from utils.paths import RDF_DB_URL, SQL_DB_URL
 from rdflib import Graph, Literal, URIRef
 from rdflib.plugins.stores.sparqlstore import SPARQLUpdateStore
@@ -455,7 +455,7 @@ class MetadataProcessor(Processor):
             for idx, row in entityWithMetadata.iterrows():
                 metadata_internalId.append("entity-" +str(idx))
             entityWithMetadata.insert(0, "entityId", Series(metadata_internalId, dtype = "string"))
-            creator = entityWithMetadata[["entityId", "creator"]
+            creator = entityWithMetadata[["entityId", "creator"]]
             entityWithMetadata = entityWithMetadata[["entityId", "id", "title"]]
             
 
