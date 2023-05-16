@@ -7,6 +7,7 @@ from sparql_dataframe import get
 from utils.clean_str import remove_special_chars
 from json import load
 from utils.CreateGraph import create_Graph
+from urllib.parse import urlparse
 
 
 #NOTE: BLOCK DATA MODEL
@@ -83,21 +84,24 @@ class Collection(EntityWithMetadata):
 
 
 # NOTE: BLOCK PROCESSORS
-# NICOLE : pls input the processor we finalize yesterday
 
-class Processor():
+class Processor(object):
+    dbPathOrUrl=""
     def __init__(self):
-        self.dbPathOrUrl = ''
+        self.dbPathOrUrl = ""
     def getDbPathOrUrl(self):
-        return self.dbPathOrUrl
-    def setDbPathOrUrl(self, dbPathOrUrl:str):
-        try:
-            self.dbPathOrUrl = dbPathOrUrl
-            # TODO: check the validity of the url
+        return self.dbPathOrUrl 
+    def setDbPathOrUrl(self, newpath):
+        if len(newpath)>=3 and newpath[-3:] == ".db":
+            self.dbPathOrUrl = newpath
             return True
-        except Exception as e:
-            print(e)
-            return False
+        else:
+            is_url = urlparse(newpath)
+            if all([is_url.scheme, is_url.netloc]):
+                self.dbPathOrUrl = newpath
+                return True
+            else:
+                return False
 
 
 class QueryProcessor(Processor):
@@ -355,14 +359,13 @@ class TriplestoreQueryProcessor(QueryProcessor):
 
 # NICOLE : pls copy and paste your updated version on RelationalQueryProcessor
 
-class RelationalQueryProcessor(Processor):          
-    def __init__(self):
-        pass
+class RelationalQueryProcessor(QueryProcessor):          
     def getAllAnnotations(self):
         with connect(self.getDbPathOrUrl()) as con:
-          q1="SELECT * FROM Annotation;" 
-          q1_table = read_sql(q1, con)
-          return q1_table      
+            q1="SELECT * FROM Annotation;" 
+            q1_table = read_sql(q1, con)
+            return q1_table 
+              
     def getAllImages(self):
         with connect(self.getDbPathOrUrl()) as con:
           q2="SELECT * FROM Image;" 
@@ -370,108 +373,112 @@ class RelationalQueryProcessor(Processor):
           return q2_table       
     def getAnnotationsWithBody(self, bodyId:str):
         with connect(self.getDbPathOrUrl())as con:
-            q3 = "SELECT* FROM Annotation WHERE body = "+ bodyId
+            q3 = f"SELECT* FROM Annotation WHERE body = '{bodyId}'"
             q3_table = read_sql(q3, con)
             return q3_table         
     def getAnnotationsWithBodyAndTarget(self, bodyId:str,targetId:str):
         with connect(self.getDbPathOrUrl())as con:
-            q4 = "SELECT* FROM Annotation WHERE body = " + bodyId + " AND target = '" + targetId +"'"
+            q4 = f"SELECT* FROM Annotation WHERE body = '{bodyId}' AND target = '{targetId}'"
             q4_table = read_sql (q4, con)
             return q4_table         
     def getAnnotationsWithTarget(self, targetId:str):
         with connect(self.getDbPathOrUrl())as con:
-            q5 = "SELECT* FROM Annotation WHERE target = '" + targetId +"'"
+            q5 = f"SELECT* FROM Annotation WHERE target = '{targetId}'"
             q5_table = read_sql(q5, con)
-            return q5_table     
+            return q5_table  
     def getEntitiesWithCreator(self, creatorName):
         with connect(self.getDbPathOrUrl())as con:
-             q6 = "SELECT* FROM Entity LEFT JOIN Creators ON Entity.entityId == Creators.entityId WHERE creator = '" + creatorName +"'"
-             result = read_sql(q6, con)       
-             return result.drop_duplicates(subset=["entityId"])
-    def getEntitiesWithLabel(self):
-        pass    
+             q6 = "SELECT Entity.entityid, Entity.id, Creators.creator, Entity.title FROM Entity LEFT JOIN Creators ON Entity.entityId == Creators.entityId WHERE creator = '" + creatorName +"'"
+             result = read_sql(q6, con)
+             return result
     def getEntitiesWithTitle(self,title):
         with connect(self.getDbPathOrUrl())as con:
              q6 = "SELECT Entity.entityid, Entity.id, Creators.creator, Entity.title FROM Entity LEFT JOIN Creators ON Entity.entityId == Creators.entityId WHERE title = '" + title +"'"
-             return read_sql(q6, con)  
+             result = read_sql(q6, con)  
+             return result
     def getEntities(self):
         with connect(self.getDbPathOrUrl())as con:
-            q7 = "SELECT Entity.entityid, Entity.id, Creators.creator, Entity.title FROM Entity LEFT JOIN Creators ON Entity.entityId == Creators.entityId"
-            result = read_sql(q7, con)
-
-        return result
+             q7 = "SELECT Entity.entityid, Entity.id, Creators.creator, Entity.title FROM Entity LEFT JOIN Creators ON Entity.entityId == Creators.entityId"
+             result = read_sql(q7, con) 
+             return result
         
-# NICOLE : pls check these two -> Annotation and Metadata Processors
 
 class AnnotationProcessor(Processor):
     def __init__(self):
         pass
     def uploadData(self, path:str): 
-  
-        annotations = read_csv(path, 
-                                keep_default_na=False,
-                                dtype={
-                                    "id": "string",
-                                    "body": "string",
-                                    "target": "string",
-                                    "motivation": "string"
-                                })
-        annotations_internalId = []
-        for idx, row in annotations.iterrows():
-            annotations_internalId.append("annotation-" +str(idx))
-        annotations.insert(0, "annotationId", Series(annotations_internalId, dtype = "string"))
-        
-        image = annotations[["body"]]
-        image = image.rename(columns={"body": "id"})
-        image_internalId = []
-        for idx, row in image.iterrows():
-            image_internalId.append("image-" +str(idx))
-        image.insert(0, "imageId", Series(image_internalId, dtype = "string"))
+        try:
+            annotations = read_csv(path, 
+                                    keep_default_na=False,
+                                    dtype={
+                                        "id": "string",
+                                        "body": "string",
+                                        "target": "string",
+                                        "motivation": "string"
+                                    })
+            annotations_internalId = []
+            for idx, row in annotations.iterrows():
+                annotations_internalId.append("annotation-" +str(idx))
+            annotations.insert(0, "annotationId", Series(annotations_internalId, dtype = "string"))
+            
+            image = annotations[["body"]]
+            image = image.rename(columns={"body": "id"})
+            image_internalId = []
+            for idx, row in image.iterrows():
+                image_internalId.append("image-" +str(idx))
+            image.insert(0, "imageId", Series(image_internalId, dtype = "string"))
 
-        with connect(self.getDbPathOrUrl()) as con:
-            annotations.to_sql("Annotation", con, if_exists="replace", index=False)
-            image.to_sql("Image", con, if_exists="replace", index=False)
+            with connect(self.getDbPathOrUrl()) as con:
+                annotations.to_sql("Annotation", con, if_exists="replace", index=False)
+                image.to_sql("Image", con, if_exists="replace", index=False)
+
+            return True
         
-        return True
+        except Exception as e:
+            print(str(e))
+            return False
 
 class MetadataProcessor(Processor):
     def __init__(self):
         pass
-    def uploadData(self, path:str): 
-        entityWithMetadata= read_csv(path, 
-                                keep_default_na=False,
-                                dtype={
-                                    "id": "string",
-                                    "title": "string",
-                                    "creator": "string"
-                                })
-        
-        metadata_internalId = []
-        for idx, row in entityWithMetadata.iterrows():
-            metadata_internalId.append("entity-" +str(idx))
-        entityWithMetadata.insert(0, "entityId", Series(metadata_internalId, dtype = "string"))
-        creator = entityWithMetadata[["entityId", "creator"]]
-        #I recreate entityMetadata since, as I will create a proxy table, I will have no need of
-        #coloumn creator
-        entityWithMetadata = entityWithMetadata[["entityId", "id", "title"]]
-        
+    def uploadData(self, path:str):
+        try: 
+            entityWithMetadata= read_csv(path, 
+                                    keep_default_na=False,
+                                    dtype={
+                                        "id": "string",
+                                        "title": "string",
+                                        "creator": "string"
+                                    })
+            
+            metadata_internalId = []
+            for idx, row in entityWithMetadata.iterrows():
+                metadata_internalId.append("entity-" +str(idx))
+            entityWithMetadata.insert(0, "entityId", Series(metadata_internalId, dtype = "string"))
+            creator = entityWithMetadata[["entityId", "creator"]
+            entityWithMetadata = entityWithMetadata[["entityId", "id", "title"]]
+            
 
-        for idx, row in creator.iterrows():
-                    for item_idx, item in row.iteritems():
-                        if "entity-" in item:
-                            entity_id = item
-                        if ";" in item:
-                            list_of_creators =  item.split(";")
-                            creator = creator.drop(idx)
-                            new_serie = []
-                            for i in range (len(list_of_creators)):
-                                new_serie.append(entity_id)
-                            new_data = DataFrame({"entityId": new_serie, "creator": list_of_creators})
-                            creator = concat([creator.loc[:idx-1], new_data, creator.loc[idx:]], ignore_index=True)
+            for idx, row in creator.iterrows():
+                        for item_idx, item in row.iteritems():
+                            if "entity-" in item:
+                                entity_id = item
+                            if ";" in item:
+                                list_of_creators =  item.split(";")
+                                creator = creator.drop(idx)
+                                new_serie = []
+                                for i in range (len(list_of_creators)):
+                                    new_serie.append(entity_id)
+                                new_data = DataFrame({"entityId": new_serie, "creator": list_of_creators})
+                                creator = concat([creator.loc[:idx-1], new_data, creator.loc[idx:]], ignore_index=True)
 
-        with connect(self.getDbPathOrUrl()) as con:
-            entityWithMetadata.to_sql("Entity", con, if_exists="replace", index = False)
-            creator.to_sql("Creators", con, if_exists="replace", index = False)
+            with connect(self.getDbPathOrUrl()) as con:
+                entityWithMetadata.to_sql("Entity", con, if_exists="replace", index = False)
+                creator.to_sql("Creators", con, if_exists="replace", index = False)
+            return True
+        except Exception as e:
+                print(str(e))
+                return False
 
 
 
@@ -659,7 +666,74 @@ class GenericQueryProcessor():
         return result
 
 
-# NICOLE : pls insert here your method for the GenericQueryProcessor
+# NICOLE 
+    def getCanvasesInCollection(self, collectionId):
+        graph_db = DataFrame()
+        relation_db = DataFrame()
+        for item in self.queryProcessors:
+            if isinstance(item, TriplestoreQueryProcessor):
+                graph_db = item.getCanvasesInCollection(collectionId)#restituisce canva, id, collection
+            elif isinstance(item, RelationalQueryProcessor):
+                relation_db = item.getEntities() #restituisce entityId, id, title, creator
+            else:
+                break
+        if not graph_db.empty:
+            df_joined = merge(graph_db, relation_db, left_on="id", right_on="id")
+            canvas_list = []
+            # itera le righe del dataframe e crea gli oggetti Canvas
+            for index, row in df_joined.iterrows():
+                canvas = Canvas(row['id'], row['label'], row['title'], row['creator'])
+                canvas_list.append(canvas)
+            return canvas_list
+    def getCanvasesInManifest(self, manifestId):
+        for item in self.queryProcessors:
+            if isinstance(item, TriplestoreQueryProcessor):
+                graph_db = item.getCanvasesInManifest(manifestId)
+                canvas_list = []
+                for index, row in graph_db.iterrows():
+                    canvas = Canvas(row['id'], row['label'], row['title'], row['creator'])
+                    canvas_list.append(canvas)
+                    return canvas_list
+            else:
+                pass
+    def getEntityById(self, id):    #ciao Bruno, questo metodo non funziona perchè non è ancora finito.
+                                         #In effetti, non capisco la sua descrizione nella documentazione.
+                                         #Il metodo, in particolare, dovrebbe restituire oggetti della classe IdentifiableEntity()
+                                         #In generale, perchè un oggetto della suddetta classe sia inizializzato, bisogna esclusivamente specificarne  l'id.
+                                         #Se il metodo stesso prende in input un id, perchè non usare direttamente questo per creare l'oggetto della classe,
+                                         #invece che passare obligatoriamente per una query del database, come specificato nella documentazione?
+        for item in self.queryProcessors:
+            if isinstance(item, TriplestoreQueryProcessor):
+                graph_db = item.getEntitiesWithId(id)   
+                for index, row in graph_db.iterrows():
+                    entity = IdentifiableEntity(row['id'])
+                    return entity
+            else:
+                pass
+    def getEntitiesWithCreator(self, creator):
+        graph_db = DataFrame()
+        relation_db = DataFrame()
+        for item in self.queryProcessors:  
+            if isinstance(item, RelationalQueryProcessor):
+                relation_db = item.getEntitiesWithCreator(creator) #restituisce entityId, id, title, creator
+            else:
+                pass
+        if not relation_db.empty:
+            id = [["id"]]
+            for item in self.queryProcessors:  
+                if isinstance(item, TriplestoreQueryProcessor):
+                    for ind, item in id.iteritems:
+                        graph_db = item.getEntitiesWithCreator(creator) #restituisce entityId, id, title, creator
+                else:
+                    pass
+        if not relation_db.empty:
+            df_joined = merge(graph_db, relation_db, left_on="id", right_on="id")
+            entity_list = []
+            # itera le righe del dataframe e crea gli oggetti Canvas
+            for index, row in df_joined.iterrows():
+                entity = EntityWithMetadata(row['id'], row['label'], row['title'], row['creator'])
+                entity_list.append(entity)
+            return entity_list
 
 # ERICA:
 
