@@ -72,9 +72,8 @@ class TestProjectBasic(unittest.TestCase):
         self.assertIsInstance(grp_qp.getAllManifests(), DataFrame)
         self.assertIsInstance(grp_qp.getCanvasesInCollection("just_a_test"), DataFrame)
         self.assertIsInstance(grp_qp.getCanvasesInManifest("just_a_test"), DataFrame)
-        # self.assertIsInstance(grp_qp.getEntityById("just_a_test"), DataFrame) # this method is not present in the UML
-        # instead there is GetEntitiesWithLabel
-        self.assertIsInstance(grp_qp.getEntitiesWithLabel("just_a_test"), DataFrame) # Erica created this line of code
+        self.assertIsInstance(grp_qp.getEntityById("just_a_test"), DataFrame) 
+        self.assertIsInstance(grp_qp.getEntitiesWithLabel("just_a_test"), DataFrame) 
         self.assertIsInstance(grp_qp.getManifestsInCollection("just_a_test"), DataFrame)
 
     def test_06_GenericQueryProcessor(self):
