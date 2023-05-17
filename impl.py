@@ -704,7 +704,7 @@ class GenericQueryProcessor():
                 break
         if not graph_db.empty:
             df_joined = merge(graph_db, relation_db, left_on="id", right_on="id")
-            for index, row in graph_db.iterrows():
+            for index, row in df_joined.iterrows():
                     canvas = Canvas(row['id'], row['label'], row['title'], row['creator'])
                     canvas_list.append(canvas)
         return canvas_list 
