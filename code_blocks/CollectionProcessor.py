@@ -1,4 +1,4 @@
-from rdflib import Graph
+from rdflib import Graph, Namespace
 from rdflib.plugins.stores.sparqlstore import SPARQLUpdateStore
 from processor import Processor 
 from json import load
@@ -21,8 +21,19 @@ class CollectionProcessor(Processor):
             with open(path, mode='r', encoding="utf-8") as jsonfile:
                 json_object = load(jsonfile)
             
+            # define namespaces 
+            nikCl = Namespace("https://github.com/n1kg0r/ds-project-dhdk/classes/")
+            nikAttr = Namespace("https://github.com/n1kg0r/ds-project-dhdk/attributes/")
+            nikRel = Namespace("https://github.com/n1kg0r/ds-project-dhdk/relations/")
+            dc = Namespace("http://purl.org/dc/elements/1.1/")
+
+            my_graph.bind("nikCl", nikCl)
+            my_graph.bind("nikAttr", nikAttr)
+            my_graph.bind("nikRel", nikRel)
+            my_graph.bind("dc", dc)
+
             #CREATE GRAPH
-            if type(json_object) is list: #CONTROLLARE!!!
+            if type(json_object) is list: 
                 for collection in json_object:
                     create_Graph(collection, base_url, my_graph)
             
@@ -41,8 +52,7 @@ class CollectionProcessor(Processor):
                 store.add(triple)
             store.close()
 
-            with open('grafo.ttl', mode='a', encoding='utf-8') as f:
-                f.write(my_graph.serialize(format='turtle'))
+            my_graph.serialize(destination="Graph_db.ttl", format="turtle")
 
             return True
         
