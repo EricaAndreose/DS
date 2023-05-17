@@ -659,30 +659,19 @@ class GenericQueryProcessor():
                 processor.getAnnotationsWithTarget()
             except Exception as e:
                 print(e)
-    def getEntityById(self, entityId):#ciao Bruno, questo metodo non funziona perchè non è ancora finito.
-                                        #In effetti, non capisco la sua descrizione nella documentazione.
-                                        #Il metodo, in particolare, dovrebbe restituire oggetti della classe IdentifiableEntity()
-                                        #In generale, perchè un oggetto della suddetta classe sia inizializzato, bisogna esclusivamente specificarne  l'id.
-                                        #Se il metodo stesso prende in input un id, perchè non usare direttamente questo per creare l'oggetto della classe,
-                                        #invece che passare obligatoriamente per una query del database, come specificato nella documentazione?
-        result = []
-        for processor in self.queryProcessors:
-            try:
-                result.append(processor.getEntityById(entityId))
-            except Exception as e:
-                print(e)
-        return result
 
-
+#Nicole 
     def getCanvasesInCollection(self, collectionId):
         graph_db = DataFrame()
         relation_db = DataFrame()
         canvas_list = []
         for item in self.queryProcessors:
             if isinstance(item, TriplestoreQueryProcessor):
-                graph_db = item.getCanvasesInCollection(collectionId)#restituisce canva, id, collection
+                graph_to_add = item.getCanvasesInCollection(collectionId)#restituisce canva, id, collection
+                graph_db = concat([graph_db,graph_to_add], ignore_index= True)
             elif isinstance(item, RelationalQueryProcessor):
-                relation_db = item.getEntities() #restituisce entityId, id, creator,title
+                relation_to_add = item.getEntities() #restituisce entityId, id, creator,title
+                relation_db = concat([relation_db, relation_to_add], ignore_index=True)
         if not graph_db.empty:
             df_joined = merge(graph_db, relation_db, left_on="id", right_on="id")
             # itera le righe del dataframe e crea gli oggetti Canvas
@@ -697,9 +686,11 @@ class GenericQueryProcessor():
         canvas_list = []
         for item in self.queryProcessors:
             if isinstance(item, TriplestoreQueryProcessor):
-                graph_db = item.getCanvasesInManifest(manifestId)
+                graph_to_add = item.getCanvasesInManifest(manifestId)
+                graph_db = concat([graph_db,graph_to_add], ignore_index= True)
             elif isinstance(item, RelationalQueryProcessor):
-                relation_db = item.getEntities() #restituisce entityId, id, title, creator
+                relation_to_add = item.getEntities() #restituisce entityId, id, title, creator
+                relation_db = concat([relation_db, relation_to_add], ignore_index=True)
             else:
                 break
         if not graph_db.empty:
@@ -723,17 +714,19 @@ class GenericQueryProcessor():
         relation_db = DataFrame()
         for item in self.queryProcessors:  
             if isinstance(item, RelationalQueryProcessor):
-                relation_db = item.getEntitiesWithCreator(creator) #restituisce entityId, id, title, creator
+                relation_to_add = item.getEntitiesWithCreator(creator) #restituisce entityId, id, title, creator
+                relation_db = concat([relation_db, relation_to_add], ignore_index=True)
             else:
                 pass
         if not relation_db.empty:
-            id = [["id"]]
+            id_db = relation_db[["id"]]
             for item in self.queryProcessors:  
                 if isinstance(item, TriplestoreQueryProcessor):
-                    for ind, item in id.iteritems:
-                        graph_db = item.getEntitiesWithCreator(creator) #restituisce entityId, id, title, creator
+                    for i, r in id_db.iterrows():
+                        graph_to_add = item.getEntitiesWithId(r['id']) #restituisce id label title
+                        graph_db = concat([graph_db,graph_to_add], ignore_index= True)
                 else:
-                    pass
+                    pass    
         entity_list =[]
         if not relation_db.empty:
             df_joined = merge(graph_db, relation_db, left_on="id", right_on="id")
@@ -742,6 +735,7 @@ class GenericQueryProcessor():
                 entity = EntityWithMetadata(row['id'], row['label'], row['title'], row['creator'])
                 entity_list.append(entity)
         return entity_list
+        
 
 # ERICA:
 
