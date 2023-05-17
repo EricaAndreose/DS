@@ -4,7 +4,7 @@ from utils.paths import RDF_DB_URL, SQL_DB_URL
 from rdflib import Graph, Literal, URIRef
 from rdflib.plugins.stores.sparqlstore import SPARQLUpdateStore
 from sparql_dataframe import get 
-from utils.clean_str import remove_special_chars
+from clean_str import remove_special_chars
 from json import load
 from utils.CreateGraph import create_Graph
 from urllib.parse import urlparse
@@ -85,8 +85,8 @@ class Collection(EntityWithMetadata):
 
 # NOTE: BLOCK PROCESSORS
 
+
 class Processor(object):
-    dbPathOrUrl=""
     def __init__(self):
         self.dbPathOrUrl = ""
     def getDbPathOrUrl(self):
@@ -357,9 +357,9 @@ class TriplestoreQueryProcessor(QueryProcessor):
         return df_sparql_getAllEntities
 
 
-# NICOLE : pls copy and paste your updated version on RelationalQueryProcessor
 
-class RelationalQueryProcessor(QueryProcessor):          
+
+class RelationalQueryProcessor(Processor):          
     def getAllAnnotations(self):
         with connect(self.getDbPathOrUrl()) as con:
             q1="SELECT * FROM Annotation;" 
@@ -381,7 +381,7 @@ class RelationalQueryProcessor(QueryProcessor):
             q4 = f"SELECT* FROM Annotation WHERE body = '{bodyId}' AND target = '{targetId}'"
             q4_table = read_sql (q4, con)
             return q4_table         
-    def getAnnotationsWithTarget(self, targetId:str):
+    def getAnnotationsWithTarget(self, targetId:str):#I've decided not to catch the empty string since in this case a Dataframe is returned, witch is okay
         with connect(self.getDbPathOrUrl())as con:
             q5 = f"SELECT* FROM Annotation WHERE target = '{targetId}'"
             q5_table = read_sql(q5, con)
@@ -400,8 +400,9 @@ class RelationalQueryProcessor(QueryProcessor):
         with connect(self.getDbPathOrUrl())as con:
              q7 = "SELECT Entity.entityid, Entity.id, Creators.creator, Entity.title FROM Entity LEFT JOIN Creators ON Entity.entityId == Creators.entityId"
              result = read_sql(q7, con) 
-             return result
+             return result 
         
+
 
 class AnnotationProcessor(Processor):
     def __init__(self):
@@ -456,6 +457,8 @@ class MetadataProcessor(Processor):
                 metadata_internalId.append("entity-" +str(idx))
             entityWithMetadata.insert(0, "entityId", Series(metadata_internalId, dtype = "string"))
             creator = entityWithMetadata[["entityId", "creator"]]
+            #I recreate entityMetadata since, as I will create a proxy table, I will have no need of
+            #coloumn creator
             entityWithMetadata = entityWithMetadata[["entityId", "id", "title"]]
             
 
@@ -656,7 +659,12 @@ class GenericQueryProcessor():
                 processor.getAnnotationsWithTarget()
             except Exception as e:
                 print(e)
-    def getEntityById(self, entityId):
+    def getEntityById(self, entityId):#ciao Bruno, questo metodo non funziona perchè non è ancora finito.
+                                        #In effetti, non capisco la sua descrizione nella documentazione.
+                                        #Il metodo, in particolare, dovrebbe restituire oggetti della classe IdentifiableEntity()
+                                        #In generale, perchè un oggetto della suddetta classe sia inizializzato, bisogna esclusivamente specificarne  l'id.
+                                        #Se il metodo stesso prende in input un id, perchè non usare direttamente questo per creare l'oggetto della classe,
+                                        #invece che passare obligatoriamente per una query del database, come specificato nella documentazione?
         result = []
         for processor in self.queryProcessors:
             try:
@@ -666,46 +674,46 @@ class GenericQueryProcessor():
         return result
 
 
-# NICOLE 
     def getCanvasesInCollection(self, collectionId):
         graph_db = DataFrame()
         relation_db = DataFrame()
+        canvas_list = []
         for item in self.queryProcessors:
             if isinstance(item, TriplestoreQueryProcessor):
                 graph_db = item.getCanvasesInCollection(collectionId)#restituisce canva, id, collection
+            elif isinstance(item, RelationalQueryProcessor):
+                relation_db = item.getEntities() #restituisce entityId, id, creator,title
+        if not graph_db.empty:
+            df_joined = merge(graph_db, relation_db, left_on="id", right_on="id")
+            # itera le righe del dataframe e crea gli oggetti Canvas
+            for index, row in df_joined.iterrows():
+                canvas = Canvas(row['id'], row['label'], row['title'], row['creator'])
+                canvas_list.append(canvas)
+        return canvas_list 
+    
+    def getCanvasesInManifest(self, manifestId):
+        graph_db = DataFrame()
+        relation_db = DataFrame()
+        canvas_list = []
+        for item in self.queryProcessors:
+            if isinstance(item, TriplestoreQueryProcessor):
+                graph_db = item.getCanvasesInManifest(manifestId)
             elif isinstance(item, RelationalQueryProcessor):
                 relation_db = item.getEntities() #restituisce entityId, id, title, creator
             else:
                 break
         if not graph_db.empty:
             df_joined = merge(graph_db, relation_db, left_on="id", right_on="id")
-            canvas_list = []
-            # itera le righe del dataframe e crea gli oggetti Canvas
-            for index, row in df_joined.iterrows():
-                canvas = Canvas(row['id'], row['label'], row['title'], row['creator'])
-                canvas_list.append(canvas)
-            return canvas_list
-    def getCanvasesInManifest(self, manifestId):
-        for item in self.queryProcessors:
-            if isinstance(item, TriplestoreQueryProcessor):
-                graph_db = item.getCanvasesInManifest(manifestId)
-                canvas_list = []
-                for index, row in graph_db.iterrows():
+            for index, row in graph_db.iterrows():
                     canvas = Canvas(row['id'], row['label'], row['title'], row['creator'])
                     canvas_list.append(canvas)
-                    return canvas_list
-            else:
-                pass
-    def getEntityById(self, id):    #ciao Bruno, questo metodo non funziona perchè non è ancora finito.
-                                         #In effetti, non capisco la sua descrizione nella documentazione.
-                                         #Il metodo, in particolare, dovrebbe restituire oggetti della classe IdentifiableEntity()
-                                         #In generale, perchè un oggetto della suddetta classe sia inizializzato, bisogna esclusivamente specificarne  l'id.
-                                         #Se il metodo stesso prende in input un id, perchè non usare direttamente questo per creare l'oggetto della classe,
-                                         #invece che passare obligatoriamente per una query del database, come specificato nella documentazione?
+        return canvas_list 
+    
+    def getEntityById(self, id):#non ancora implementato
         for item in self.queryProcessors:
             if isinstance(item, TriplestoreQueryProcessor):
-                graph_db = item.getEntitiesWithId(id)   
-                for index, row in graph_db.iterrows():
+                graph_db = item.getEntitiesWithId(id)  
+                for index, row in graph_db.iterrows(): 
                     entity = IdentifiableEntity(row['id'])
                     return entity
             else:
@@ -726,14 +734,14 @@ class GenericQueryProcessor():
                         graph_db = item.getEntitiesWithCreator(creator) #restituisce entityId, id, title, creator
                 else:
                     pass
+        entity_list =[]
         if not relation_db.empty:
             df_joined = merge(graph_db, relation_db, left_on="id", right_on="id")
-            entity_list = []
             # itera le righe del dataframe e crea gli oggetti Canvas
             for index, row in df_joined.iterrows():
                 entity = EntityWithMetadata(row['id'], row['label'], row['title'], row['creator'])
                 entity_list.append(entity)
-            return entity_list
+        return entity_list
 
 # ERICA:
 
