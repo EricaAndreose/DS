@@ -1,7 +1,7 @@
 from sqlite3 import connect
 from pandas import read_sql, DataFrame, concat, read_csv, Series, merge
 from utils.paths import RDF_DB_URL, SQL_DB_URL
-from rdflib import Graph, Literal, URIRef
+from rdflib import Graph, Literal, URIRef, Namespace
 from rdflib.plugins.stores.sparqlstore import SPARQLUpdateStore
 from sparql_dataframe import get 
 from clean_str import remove_special_chars
@@ -141,269 +141,6 @@ class QueryProcessor(Processor):
         return df
 
 
-class TriplestoreQueryProcessor(QueryProcessor):
-
-    def __init__(self):
-        super().__init__()
-
-    def getAllCanvases(self):
-
-        endpoint = self.getDbPathOrUrl()
-        query_canvases = """
-        PREFIX ns1: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
-        PREFIX ns2: <http://purl.org/dc/elements/1.1/> 
-        PREFIX ns3: <https://github.com/n1kg0r/ds-project-dhdk/relations/> 
-
-        SELECT ?canvas ?id ?label
-        WHERE {
-            ?canvas a <https://github.com/n1kg0r/ds-project-dhdk/classes/Canvas>;
-            ns2:identifier ?id;
-            ns1:label ?label.
-        }
-        """
-
-        df_sparql_getAllCanvases = get(endpoint, query_canvases, True)
-        return df_sparql_getAllCanvases
-
-    def getAllCollections(self):
-
-        endpoint = self.getDbPathOrUrl()
-        query_collections = """
-        PREFIX ns1: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
-        PREFIX ns2: <http://purl.org/dc/elements/1.1/> 
-        PREFIX ns3: <https://github.com/n1kg0r/ds-project-dhdk/relations/> 
-
-        SELECT ?collection ?id ?label
-        WHERE {
-           ?collection a <https://github.com/n1kg0r/ds-project-dhdk/classes/Collection>;
-           ns2:identifier ?id;
-           ns1:label ?label .
-        }
-        """
-
-        df_sparql_getAllCollections = get(endpoint, query_collections, True)
-        return df_sparql_getAllCollections
-
-    def getAllManifests(self):
-
-        endpoint = self.getDbPathOrUrl()
-        query_manifest = """
-        PREFIX ns1: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
-        PREFIX ns2: <http://purl.org/dc/elements/1.1/> 
-        PREFIX ns3: <https://github.com/n1kg0r/ds-project-dhdk/relations/> 
-
-        SELECT ?manifest ?id ?label
-        WHERE {
-           ?manifest a <https://github.com/n1kg0r/ds-project-dhdk/classes/Manifest>;
-           ns2:identifier ?id;
-           ns1:label ?label .
-        }
-        """
-
-        df_sparql_getAllManifest = get(endpoint, query_manifest, True)
-        return df_sparql_getAllManifest
-
-    def getCanvasesInCollection(self, collectionId: str):
-
-        endpoint = self.setDbPathOrUrl()
-        query_canInCol = """
-        PREFIX ns1: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
-        PREFIX ns2: <http://purl.org/dc/elements/1.1/> 
-        PREFIX ns3: <https://github.com/n1kg0r/ds-project-dhdk/relations/> 
-
-        SELECT ?canvas ?id ?label 
-        WHERE {
-            ?collection a <https://github.com/n1kg0r/ds-project-dhdk/classes/Collection> ;
-            ns2:identifier "%s" ;
-            ns3:items ?manifest .
-            ?manifest a <https://github.com/n1kg0r/ds-project-dhdk/classes/Manifest> ;
-            ns3:items ?canvas .
-            ?canvas a <https://github.com/n1kg0r/ds-project-dhdk/classes/Canvas> ;
-            ns2:identifier ?id ;
-            ns1:label ?label .
-        }
-        """ % collectionId
-
-        df_sparql_getCanvasesInCollection = get(endpoint, query_canInCol, True)
-        return df_sparql_getCanvasesInCollection
-
-    def getCanvasesInManifest(self, manifestId: str):
-
-        endpoint = self.getDbPathOrUrl()
-        query_canInMan = """
-        PREFIX ns1: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
-        PREFIX ns2: <http://purl.org/dc/elements/1.1/> 
-        PREFIX ns3: <https://github.com/n1kg0r/ds-project-dhdk/relations/> 
-
-        SELECT ?canvas ?id ?label
-        WHERE {
-            ?manifest a <https://github.com/n1kg0r/ds-project-dhdk/classes/Manifest> ;
-            ns2:identifier "%s" ;
-            ns3:items ?canvas .
-            ?canvas a <https://github.com/n1kg0r/ds-project-dhdk/classes/Canvas> ;
-            ns2:identifier ?id ;
-            ns1:label ?label .
-        }
-        """ % manifestId
-
-        df_sparql_getCanvasesInManifest = get(endpoint, query_canInMan, True)
-        return df_sparql_getCanvasesInManifest
-
-
-    def getManifestsInCollection(self, collectionId: str):
-
-        endpoint = self.getDbPathOrUrl()
-        query_manInCol = """
-        PREFIX ns1: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
-        PREFIX ns2: <http://purl.org/dc/elements/1.1/> 
-        PREFIX ns3: <https://github.com/n1kg0r/ds-project-dhdk/relations/> 
-
-        SELECT ?manifest ?id ?label
-        WHERE {
-            ?collection a <https://github.com/n1kg0r/ds-project-dhdk/classes/Collection> ;
-            ns2:identifier "%s" ;
-            ns3:items ?manifest .
-            ?manifest a <https://github.com/n1kg0r/ds-project-dhdk/classes/Manifest> ;
-            ns2:identifier ?id ;
-            ns1:label ?label .
-        }
-        """ % collectionId
-
-        df_sparql_getManifestInCollection = get(endpoint, query_manInCol, True)
-        return df_sparql_getManifestInCollection
-    
-
-    def getEntitiesWithLabel(self, label: str): 
-            
-
-        endpoint = self.getDbPathOrUrl()
-        query_entityLabel = """
-        PREFIX ns1: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
-        PREFIX ns2: <http://purl.org/dc/elements/1.1/> 
-        PREFIX ns3: <https://github.com/n1kg0r/ds-project-dhdk/relations/> 
-
-        SELECT ?entity ?type ?label ?id
-        WHERE {
-            ?entity ns1:label "%s" ;
-            a ?type ;
-            ns1:label ?label ;
-            ns2:identifier ?id .
-        }
-        """ % remove_special_chars(label)
-
-        df_sparql_getEntitiesWithLabel = get(endpoint, query_entityLabel, True)
-        return df_sparql_getEntitiesWithLabel
-    
-
-    def getEntitiesWithCanvas(self, canvasId: str): 
-            
-        endpoint = self.getDbPathOrUrl()
-        query_entityCanvas = """
-        PREFIX ns1: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
-        PREFIX ns2: <http://purl.org/dc/elements/1.1/> 
-        PREFIX ns3: <https://github.com/n1kg0r/ds-project-dhdk/relations/> 
-
-        SELECT ?id ?label ?type
-        WHERE {
-            ?entity ns2:identifier "%s" ;
-            ns2:identifier ?id ;
-            ns1:label ?label ;
-            a ?type .
-        }
-        """ % remove_special_chars(canvasId)
-
-        df_sparql_getEntitiesWithCanvas = get(endpoint, query_entityCanvas, True)
-        return df_sparql_getEntitiesWithCanvas
-    
-    def getEntitiesWithId(self, id: str): 
-            
-        endpoint = self.getDbPathOrUrl()
-        query_entityId = """
-        PREFIX ns1: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
-        PREFIX ns2: <http://purl.org/dc/elements/1.1/> 
-        PREFIX ns3: <https://github.com/n1kg0r/ds-project-dhdk/relations/> 
-
-        SELECT ?id ?label ?type
-        WHERE {
-            ?entity ns2:identifier "%s" ;
-            ns2:identifier ?id ;
-            ns1:label ?label ;
-            a ?type .
-        }
-        """ % remove_special_chars(id)
-
-        df_sparql_getEntitiesWithId = get(endpoint, query_entityId, True)
-        return df_sparql_getEntitiesWithId
-    
-
-    def getAllEntities(self): 
-            
-        endpoint = self.getDbPathOrUrl()
-        query_AllEntities = """
-        PREFIX ns1: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
-        PREFIX ns2: <http://purl.org/dc/elements/1.1/> 
-        PREFIX ns3: <https://github.com/n1kg0r/ds-project-dhdk/relations/> 
-
-        SELECT ?entity ?id ?label ?type
-        WHERE {
-            ?entity ns2:identifier ?id ;
-                    ns2:identifier ?id ;
-                    ns1:label ?label ;
-                    a ?type .
-        }
-        """ 
-
-        df_sparql_getAllEntities = get(endpoint, query_AllEntities, True)
-        return df_sparql_getAllEntities
-
-
-
-
-class RelationalQueryProcessor(Processor):          
-    def getAllAnnotations(self):
-        with connect(self.getDbPathOrUrl()) as con:
-            q1="SELECT * FROM Annotation;" 
-            q1_table = read_sql(q1, con)
-            return q1_table 
-              
-    def getAllImages(self):
-        with connect(self.getDbPathOrUrl()) as con:
-          q2="SELECT * FROM Image;" 
-          q2_table = read_sql(q2, con)
-          return q2_table       
-    def getAnnotationsWithBody(self, bodyId:str):
-        with connect(self.getDbPathOrUrl())as con:
-            q3 = f"SELECT* FROM Annotation WHERE body = '{bodyId}'"
-            q3_table = read_sql(q3, con)
-            return q3_table         
-    def getAnnotationsWithBodyAndTarget(self, bodyId:str,targetId:str):
-        with connect(self.getDbPathOrUrl())as con:
-            q4 = f"SELECT* FROM Annotation WHERE body = '{bodyId}' AND target = '{targetId}'"
-            q4_table = read_sql (q4, con)
-            return q4_table         
-    def getAnnotationsWithTarget(self, targetId:str):#I've decided not to catch the empty string since in this case a Dataframe is returned, witch is okay
-        with connect(self.getDbPathOrUrl())as con:
-            q5 = f"SELECT* FROM Annotation WHERE target = '{targetId}'"
-            q5_table = read_sql(q5, con)
-            return q5_table  
-    def getEntitiesWithCreator(self, creatorName):
-        with connect(self.getDbPathOrUrl())as con:
-             q6 = "SELECT Entity.entityid, Entity.id, Creators.creator, Entity.title FROM Entity LEFT JOIN Creators ON Entity.entityId == Creators.entityId WHERE creator = '" + creatorName +"'"
-             result = read_sql(q6, con)
-             return result
-    def getEntitiesWithTitle(self,title):
-        with connect(self.getDbPathOrUrl())as con:
-             q6 = "SELECT Entity.entityid, Entity.id, Creators.creator, Entity.title FROM Entity LEFT JOIN Creators ON Entity.entityId == Creators.entityId WHERE title = '" + title +"'"
-             result = read_sql(q6, con)  
-             return result
-    def getEntities(self):
-        with connect(self.getDbPathOrUrl())as con:
-             q7 = "SELECT Entity.entityid, Entity.id, Creators.creator, Entity.title FROM Entity LEFT JOIN Creators ON Entity.entityId == Creators.entityId"
-             result = read_sql(q7, con) 
-             return result 
-        
-
-
 class AnnotationProcessor(Processor):
     def __init__(self):
         pass
@@ -496,8 +233,18 @@ class CollectionProcessor(Processor):
 
             base_url = "https://github.com/n1kg0r/ds-project-dhdk/"
             my_graph = Graph()
-            
 
+            # define namespaces 
+            nikCl = Namespace("https://github.com/n1kg0r/ds-project-dhdk/classes/")
+            nikAttr = Namespace("https://github.com/n1kg0r/ds-project-dhdk/attributes/")
+            nikRel = Namespace("https://github.com/n1kg0r/ds-project-dhdk/relations/")
+            dc = Namespace("http://purl.org/dc/elements/1.1/")
+
+            my_graph.bind("nikCl", nikCl)
+            my_graph.bind("nikAttr", nikAttr)
+            my_graph.bind("nikRel", nikRel)
+            my_graph.bind("dc", dc)
+            
             with open(path, mode='r', encoding="utf-8") as jsonfile:
                 json_object = load(jsonfile)
             
@@ -520,8 +267,10 @@ class CollectionProcessor(Processor):
             for triple in my_graph.triples((None, None, None)):
                 store.add(triple)
             store.close()
-
-            with open('grafo.ttl', mode='a', encoding='utf-8') as f:
+            
+            # FIX
+            # my_graph.serialize(destination="Graph_db.ttl", format="turtle")
+            with open('Graph_db.ttl', mode='a', encoding='utf-8') as f:
                 f.write(my_graph.serialize(format='turtle'))
 
             return True
@@ -530,6 +279,275 @@ class CollectionProcessor(Processor):
             print(str(e))
             return False
         
+
+class RelationalQueryProcessor(Processor):          
+    def getAllAnnotations(self):
+        with connect(self.getDbPathOrUrl()) as con:
+            q1="SELECT * FROM Annotation;" 
+            q1_table = read_sql(q1, con)
+            return q1_table 
+              
+    def getAllImages(self):
+        with connect(self.getDbPathOrUrl()) as con:
+          q2="SELECT * FROM Image;" 
+          q2_table = read_sql(q2, con)
+          return q2_table       
+    def getAnnotationsWithBody(self, bodyId:str):
+        with connect(self.getDbPathOrUrl())as con:
+            q3 = f"SELECT* FROM Annotation WHERE body = '{bodyId}'"
+            q3_table = read_sql(q3, con)
+            return q3_table         
+    def getAnnotationsWithBodyAndTarget(self, bodyId:str,targetId:str):
+        with connect(self.getDbPathOrUrl())as con:
+            q4 = f"SELECT* FROM Annotation WHERE body = '{bodyId}' AND target = '{targetId}'"
+            q4_table = read_sql (q4, con)
+            return q4_table         
+    def getAnnotationsWithTarget(self, targetId:str):#I've decided not to catch the empty string since in this case a Dataframe is returned, witch is okay
+        with connect(self.getDbPathOrUrl())as con:
+            q5 = f"SELECT* FROM Annotation WHERE target = '{targetId}'"
+            q5_table = read_sql(q5, con)
+            return q5_table  
+    def getEntitiesWithCreator(self, creatorName):
+        with connect(self.getDbPathOrUrl())as con:
+             q6 = "SELECT Entity.entityid, Entity.id, Creators.creator, Entity.title FROM Entity LEFT JOIN Creators ON Entity.entityId == Creators.entityId WHERE creator = '" + creatorName +"'"
+             result = read_sql(q6, con)
+             return result
+    def getEntitiesWithTitle(self,title):
+        with connect(self.getDbPathOrUrl())as con:
+             q6 = "SELECT Entity.entityid, Entity.id, Creators.creator, Entity.title FROM Entity LEFT JOIN Creators ON Entity.entityId == Creators.entityId WHERE title = '" + title +"'"
+             result = read_sql(q6, con)  
+             return result
+    def getEntities(self):
+        with connect(self.getDbPathOrUrl())as con:
+             q7 = "SELECT Entity.entityid, Entity.id, Creators.creator, Entity.title FROM Entity LEFT JOIN Creators ON Entity.entityId == Creators.entityId"
+             result = read_sql(q7, con) 
+             return result 
+        
+        
+class TriplestoreQueryProcessor(QueryProcessor):
+
+    def __init__(self):
+        super().__init__()
+
+    def getAllCanvases(self):
+
+        endpoint = self.getDbPathOrUrl()
+        query_canvases = """
+        PREFIX dc: <http://purl.org/dc/elements/1.1/> 
+        PREFIX nikAttr: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
+        PREFIX nikCl: <https://github.com/n1kg0r/ds-project-dhdk/classes/> 
+        PREFIX nikRel: <https://github.com/n1kg0r/ds-project-dhdk/relations/> 
+
+        SELECT ?canvas ?id ?label
+        WHERE {
+            ?canvas a nikCl:Canvas;
+            dc:identifier ?id;
+            nikAttr:label ?label.
+        }
+        """
+
+        df_sparql_getAllCanvases = get(endpoint, query_canvases, True)
+        return df_sparql_getAllCanvases
+
+    def getAllCollections(self):
+
+        endpoint = self.getDbPathOrUrl()
+        query_collections = """
+        PREFIX dc: <http://purl.org/dc/elements/1.1/> 
+        PREFIX nikAttr: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
+        PREFIX nikCl: <https://github.com/n1kg0r/ds-project-dhdk/classes/> 
+        PREFIX nikRel: <https://github.com/n1kg0r/ds-project-dhdk/relations/> 
+
+        SELECT ?collection ?id ?label
+        WHERE {
+           ?collection a nikCl:Collection;
+           dc:identifier ?id;
+           nikAttr:label ?label .
+        }
+        """
+
+        df_sparql_getAllCollections = get(endpoint, query_collections, True)
+        return df_sparql_getAllCollections
+
+    def getAllManifests(self):
+
+        endpoint = self.getDbPathOrUrl()
+        query_manifest = """
+        PREFIX dc: <http://purl.org/dc/elements/1.1/> 
+        PREFIX nikAttr: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
+        PREFIX nikCl: <https://github.com/n1kg0r/ds-project-dhdk/classes/> 
+        PREFIX nikRel: <https://github.com/n1kg0r/ds-project-dhdk/relations/>
+
+        SELECT ?manifest ?id ?label
+        WHERE {
+           ?manifest a nikCl:Manifest ;
+           dc:identifier ?id ;
+           nikAttr:label ?label .
+        }
+        """
+
+        df_sparql_getAllManifest = get(endpoint, query_manifest, True)
+        return df_sparql_getAllManifest
+
+    def getCanvasesInCollection(self, collectionId: str):
+
+        endpoint = self.getDbPathOrUrl()
+        query_canInCol = """
+        PREFIX dc: <http://purl.org/dc/elements/1.1/> 
+        PREFIX nikAttr: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
+        PREFIX nikCl: <https://github.com/n1kg0r/ds-project-dhdk/classes/> 
+        PREFIX nikRel: <https://github.com/n1kg0r/ds-project-dhdk/relations/>
+
+        SELECT ?canvas ?id ?label 
+        WHERE {
+            ?collection a nikCl:Collection ;
+            dc:identifier "%s" ;
+            nikRel:items ?manifest .
+            ?manifest a nikCl:Manifest ;
+            nikRel:items ?canvas .
+            ?canvas a nikCl:Canvas ;
+            dc:identifier ?id ;
+            nikAttr:label ?label .
+        }
+        """ % collectionId
+
+        df_sparql_getCanvasesInCollection = get(endpoint, query_canInCol, True)
+        return df_sparql_getCanvasesInCollection
+
+    def getCanvasesInManifest(self, manifestId: str):
+
+        endpoint = self.getDbPathOrUrl()
+        query_canInMan = """
+        PREFIX dc: <http://purl.org/dc/elements/1.1/> 
+        PREFIX nikAttr: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
+        PREFIX nikCl: <https://github.com/n1kg0r/ds-project-dhdk/classes/> 
+        PREFIX nikRel: <https://github.com/n1kg0r/ds-project-dhdk/relations/> 
+
+        SELECT ?canvas ?id ?label
+        WHERE {
+            ?manifest a nikCl:Manifest ;
+            dc:identifier "%s" ;
+            nikRel:items ?canvas .
+            ?canvas a nikCl:Canvas ;
+            dc:identifier ?id ;
+            nikAttr:label ?label .
+        }
+        """ % manifestId
+
+        df_sparql_getCanvasesInManifest = get(endpoint, query_canInMan, True)
+        return df_sparql_getCanvasesInManifest
+
+
+    def getManifestsInCollection(self, collectionId: str):
+
+        endpoint = self.getDbPathOrUrl()
+        query_manInCol = """
+        PREFIX dc: <http://purl.org/dc/elements/1.1/> 
+        PREFIX nikAttr: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
+        PREFIX nikCl: <https://github.com/n1kg0r/ds-project-dhdk/classes/> 
+        PREFIX nikRel: <https://github.com/n1kg0r/ds-project-dhdk/relations/>  
+
+        SELECT ?manifest ?id ?label
+        WHERE {
+            ?collection a nikCl:Collection ;
+            dc:identifier "%s" ;
+            nikRel:items ?manifest .
+            ?manifest a nikCl:Manifest ;
+            dc:identifier ?id ;
+            nikAttr:label ?label .
+        }
+        """ % collectionId
+
+        df_sparql_getManifestInCollection = get(endpoint, query_manInCol, True)
+        return df_sparql_getManifestInCollection
+    
+
+    def getEntitiesWithLabel(self, label: str): 
+            
+
+        endpoint = self.getDbPathOrUrl()
+        query_entityLabel = """
+        PREFIX dc: <http://purl.org/dc/elements/1.1/> 
+        PREFIX nikAttr: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
+        PREFIX nikCl: <https://github.com/n1kg0r/ds-project-dhdk/classes/> 
+        PREFIX nikRel: <https://github.com/n1kg0r/ds-project-dhdk/relations/>
+
+        SELECT ?entity ?type ?label ?id
+        WHERE {
+            ?entity nikAttr:label "%s" ;
+            a ?type ;
+            nikAttr:label ?label ;
+            dc:identifier ?id .
+        }
+        """ % remove_special_chars(label)
+
+        df_sparql_getEntitiesWithLabel = get(endpoint, query_entityLabel, True)
+        return df_sparql_getEntitiesWithLabel
+    
+
+    def getEntitiesWithCanvas(self, canvasId: str): 
+            
+        endpoint = self.getDbPathOrUrl()
+        query_entityCanvas = """
+        PREFIX dc: <http://purl.org/dc/elements/1.1/> 
+        PREFIX nikAttr: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
+        PREFIX nikCl: <https://github.com/n1kg0r/ds-project-dhdk/classes/> 
+        PREFIX nikRel: <https://github.com/n1kg0r/ds-project-dhdk/relations/> 
+
+        SELECT ?id ?label ?type
+        WHERE {
+            ?entity dc:identifier "%s" ;
+            dc:identifier ?id ;
+            nikAttr:label ?label ;
+            a ?type .
+        }
+        """ % remove_special_chars(canvasId)
+
+        df_sparql_getEntitiesWithCanvas = get(endpoint, query_entityCanvas, True)
+        return df_sparql_getEntitiesWithCanvas
+    
+    def getEntitiesWithId(self, id: str): 
+            
+        endpoint = self.getDbPathOrUrl()
+        query_entityId = """
+        PREFIX dc: <http://purl.org/dc/elements/1.1/> 
+        PREFIX nikAttr: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
+        PREFIX nikCl: <https://github.com/n1kg0r/ds-project-dhdk/classes/> 
+        PREFIX nikRel: <https://github.com/n1kg0r/ds-project-dhdk/relations/> 
+
+        SELECT ?id ?label ?type
+        WHERE {
+            ?entity dc:identifier "%s" ;
+            dc:identifier ?id ;
+            nikAttr:label ?label ;
+            a ?type .
+        }
+        """ % remove_special_chars(id)
+
+        df_sparql_getEntitiesWithId = get(endpoint, query_entityId, True)
+        return df_sparql_getEntitiesWithId
+    
+
+    def getAllEntities(self): 
+            
+        endpoint = self.getDbPathOrUrl()
+        query_AllEntities = """
+        PREFIX dc: <http://purl.org/dc/elements/1.1/> 
+        PREFIX nikAttr: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
+        PREFIX nikCl: <https://github.com/n1kg0r/ds-project-dhdk/classes/> 
+        PREFIX nikRel: <https://github.com/n1kg0r/ds-project-dhdk/relations/> 
+
+        SELECT ?entity ?id ?label ?type
+        WHERE {
+            ?entity dc:identifier ?id ;
+                    dc:identifier ?id ;
+                    nikAttr:label ?label ;
+                    a ?type .
+        }
+        """ 
+
+        df_sparql_getAllEntities = get(endpoint, query_AllEntities, True)
+        return df_sparql_getAllEntities
 
 
 # NOTE: BLOCK GENERIC PROCESSOR
@@ -773,10 +791,9 @@ class GenericQueryProcessor():
                     creators_row = row['creator']
                     for item in creators_row: # iterate the string and find out if there are some ";", if there are, split them
                         if item == ";":
-                            creators = creators_row.split(';') # if it's a string the class attribute would automatically append every string in a list
+                            creators = creators_row.split(';') 
                             break
-                    else:
-                        creators = [creators_row] # else, create a list and the class attribute will take it directly 
+                
 
                     entities = EntityWithMetadata(id, label, title, creators)
                     result.append(entities)
@@ -828,7 +845,7 @@ class GenericQueryProcessor():
                 entities = EntityWithMetadata(id, label, title, creators)
                 result.append(entities)
 
-        return result
+                return result
         
 
     def getImagesAnnotatingCanvas(self, canvasId):
@@ -854,7 +871,7 @@ class GenericQueryProcessor():
                 images = Image(id)
             result.append(images)
 
-        return result
+            return result
     
 
     def getManifestsInCollection(self, collectionId):
@@ -887,7 +904,7 @@ class GenericQueryProcessor():
                     manifests = Manifest(id, label, title, creators, items)
                     result.append(manifests)
 
-            return result
+                return result
         else: 
             result = list()
 
@@ -900,7 +917,7 @@ class GenericQueryProcessor():
                 manifests = Manifest(id, label, title, creators, items)
                 result.append(manifests)            
 
-            return result
+                return result
 
 
 # NOTE: TEST BLOCK, TO BE DELETED
