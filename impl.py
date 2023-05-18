@@ -1,7 +1,7 @@
 from sqlite3 import connect
 from pandas import read_sql, DataFrame, concat, read_csv, Series, merge
 from utils.paths import RDF_DB_URL, SQL_DB_URL
-from rdflib import Graph, Literal, URIRef, Namespace
+from rdflib import Graph, Namespace
 from rdflib.plugins.stores.sparqlstore import SPARQLUpdateStore
 from sparql_dataframe import get 
 from clean_str import remove_special_chars
@@ -126,9 +126,10 @@ class QueryProcessor(Processor):
         elif db_url == RDF_DB_URL:
             endpoint = 'http://127.0.0.1:9999/blazegraph/sparql'
             query = """
-                PREFIX ns1: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
-                PREFIX ns2: <http://purl.org/dc/elements/1.1/> 
-                PREFIX ns3: <https://github.com/n1kg0r/ds-project-dhdk/relations/> 
+                PREFIX dc: <http://purl.org/dc/elements/1.1/> 
+                PREFIX nikAttr: <https://github.com/n1kg0r/ds-project-dhdk/attributes/> 
+                PREFIX nikCl: <https://github.com/n1kg0r/ds-project-dhdk/classes/> 
+                PREFIX nikRel: <https://github.com/n1kg0r/ds-project-dhdk/relations/> 
 
                 SELECT ?entity
                 WHERE {
@@ -501,7 +502,7 @@ class TriplestoreQueryProcessor(QueryProcessor):
             nikAttr:label ?label ;
             a ?type .
         }
-        """ % remove_special_chars(canvasId)
+        """ % canvasId
 
         df_sparql_getEntitiesWithCanvas = get(endpoint, query_entityCanvas, True)
         return df_sparql_getEntitiesWithCanvas
@@ -522,7 +523,7 @@ class TriplestoreQueryProcessor(QueryProcessor):
             nikAttr:label ?label ;
             a ?type .
         }
-        """ % remove_special_chars(id)
+        """ % id
 
         df_sparql_getEntitiesWithId = get(endpoint, query_entityId, True)
         return df_sparql_getEntitiesWithId
@@ -760,50 +761,58 @@ class GenericQueryProcessor():
     def getEntitiesWithLabel(self, label):
         
         graph_db = DataFrame()
-        relational_db = DataFrame()
+        relation_db = DataFrame()
+        result = list()
 
         for processor in self.queryProcessors:
             if isinstance(processor, TriplestoreQueryProcessor):
-                graph_db = processor.getEntitiesWithLabel(label)
+                graph_to_add = processor.getEntitiesWithLabel(label)
+                graph_db = concat([graph_db, graph_to_add], ignore_index= True)
             elif isinstance(processor, RelationalQueryProcessor):
-                relational_db = processor.getEntities()
+                relation_to_add = processor.getEntities()
+                relation_db = concat([relation_db, relation_to_add], ignore_index=True)
             else:
                 break
-            
+        
         if not graph_db.empty: #check if the call got some result
-            df_joined = merge(graph_db, relational_db, left_on="id", right_on="id") #create the merge with the two db
-            df_joined_fill = df_joined.fillna("") 
-            grouped = df_joined_fill.groupby("id").agg({
+            df_joined = merge(graph_db, relation_db, left_on="id", right_on="id") #create the merge with the two db
+            grouped = df_joined.groupby("id").agg({
                                                         "label": "first",
                                                         "title": "first",
                                                         "creator": lambda x: "; ".join(x)
                                                     }).reset_index() #this is to avoid duplicates when we have more than one creator
-            sorted = grouped.sort_values("id") #sorted for id
+            grouped_fill = grouped.fillna('')
+            sorted = grouped_fill.sort_values("id") #sorted for id
 
-            if not sorted.empty: # if the merge has some result inside, proceed
-        
-                result = list()
-
+            if not sorted.empty:
+                # if the merge has some result inside, proceed
                 for row_idx, row in sorted.iterrows():
-                    id = row["id"]
-                    label = label
-                    title = row["title"]
-                    creators_row = row['creator']
-                    for item in creators_row: # iterate the string and find out if there are some ";", if there are, split them
-                        if item == ";":
-                            creators = creators_row.split(';') 
-                            break
-                
+                    if row["title"] != '' and row["creator"] != '':
+                        id = row["id"]
+                        label = label
+                        title = row["title"]
+                        creators = row['creator']
+                        for item in creators: # iterate the string and find out if there are some ";", if there are, split them
+                            if ";" in item:
+                                creators = creators.split(';') 
+                            
 
-                    entities = EntityWithMetadata(id, label, title, creators)
-                    result.append(entities)
-                
+                        entities = EntityWithMetadata(id, label, title, creators)
+                        result.append(entities)
+                    
+                    else: 
 
-                return result
+                        id = row["id"]
+                        label = label
+                        title = ""
+                        creators = ""
+
+                        entities = EntityWithMetadata(id, label, title, creators)
+                        result.append(entities)
             
-            else: # if the merge got no result and is empty, then take only the result of the graph_db query and fill the attributes with empty strings
-                result = list()
-
+                return result
+        
+            else:
                 for row_idx, row in graph_db.iterrows():
                     id = row["id"]
                     label = label
@@ -812,8 +821,6 @@ class GenericQueryProcessor():
 
                     entities = EntityWithMetadata(id, label, title, creators)
                     result.append(entities)
-                
-
                 return result
                 
 
@@ -821,50 +828,63 @@ class GenericQueryProcessor():
     def getEntitiesWithTitle(self, title):
 
         graph_db = DataFrame()
-        relational_db = DataFrame()
+        relation_db = DataFrame()
+        result = list()
 
         for processor in self.queryProcessors:
             if isinstance(processor, TriplestoreQueryProcessor):
-                graph_db = processor.getAllEntities()
+                graph_to_add = processor.getAllEntities()
+                graph_db = concat([graph_db ,graph_to_add], ignore_index= True)
             elif isinstance(processor, RelationalQueryProcessor):
-                relational_db = processor.getEntitiesWithTitle(title)
+                relation_to_add = processor.getEntitiesWithTitle(title)
+                relation_db = concat([relation_db, relation_to_add], ignore_index=True)
             else:
                 break        
         
 
         if not graph_db.empty:
-            df_joined = merge(graph_db, relational_db, left_on="id", right_on="id")
+            df_joined = merge(graph_db, relation_db, left_on="id", right_on="id")
+            grouped = df_joined.groupby("id").agg({
+                                                        "label": "first",
+                                                        "title": "first",
+                                                        "creator": lambda x: "; ".join(x)
+                                                    }).reset_index() #this is to avoid duplicates when we have more than one creator
+            grouped_fill = grouped.fillna('')
+            sorted = grouped_fill.sort_values("id")
 
-            result = list()
-
-            for row_idx, row in df_joined.iterrows():
+            for row_idx, row in sorted.iterrows():
                 id = row["id"]
                 label = row["label"]
                 title = title
                 creators = row["creator"]
+                for item in creators: # iterate the string and find out if there are some ";", if there are, split them
+                            if ";" in item:
+                                creators = creators.split(';') 
                 entities = EntityWithMetadata(id, label, title, creators)
                 result.append(entities)
 
-                return result
+        return result
         
 
     def getImagesAnnotatingCanvas(self, canvasId):
 
         graph_db = DataFrame()
-        relational_db = DataFrame()
+        relation_db = DataFrame()
+        result = list()
 
         for processor in self.queryProcessors:
 
             if isinstance(processor, TriplestoreQueryProcessor):
-                graph_db = processor.getEntitiesWithCanvas(canvasId)
+                graph_to_add = processor.getEntitiesWithCanvas(canvasId)
+                graph_db = concat([graph_db,graph_to_add], ignore_index= True)
             elif isinstance(processor, RelationalQueryProcessor):
-                relational_db = processor.getAllAnnotations()
+                relation_to_add = processor.getAllAnnotations()
+                relation_db = concat([relation_db, relation_to_add], ignore_index=True)
             else:
                 break
 
         if not graph_db.empty:
-            df_joined = merge(graph_db, relational_db, left_on="id", right_on="target")
-            result = list()
+            df_joined = merge(graph_db, relation_db, left_on="id", right_on="target")
 
             for row_idx, row in df_joined.iterrows():
                 id = row["body"]
@@ -877,23 +897,24 @@ class GenericQueryProcessor():
     def getManifestsInCollection(self, collectionId):
 
         graph_db = DataFrame()
-        relational_db = DataFrame()
+        relation_db = DataFrame()
+        result = list()
         
         for processor in self.queryProcessors:
             if isinstance(processor, TriplestoreQueryProcessor):
-                graph_db = processor.getManifestsInCollection(collectionId)
+                graph_to_add = processor.getManifestsInCollection(collectionId)
+                graph_db = concat([graph_db,graph_to_add], ignore_index= True)
             elif isinstance(processor, RelationalQueryProcessor):
-                relational_db = processor.getEntities()
+                relation_to_add = processor.getEntities()
+                relation_db = concat([relation_db, relation_to_add], ignore_index=True)
             else:
                 break
         
 
         if not graph_db.empty:
-            df_joined = merge(graph_db, relational_db, left_on="id", right_on="id") 
+            df_joined = merge(graph_db, relation_db, left_on="id", right_on="id") 
 
             if not df_joined.empty:
-               
-                result = list()
 
                 for row_idx, row in df_joined.iterrows():
                     id = row["id"]
@@ -904,9 +925,8 @@ class GenericQueryProcessor():
                     manifests = Manifest(id, label, title, creators, items)
                     result.append(manifests)
 
-                return result
+            return result
         else: 
-            result = list()
 
             for row_idx, row in graph_db.iterrows():
                 id = row["id"]
@@ -917,95 +937,66 @@ class GenericQueryProcessor():
                 manifests = Manifest(id, label, title, creators, items)
                 result.append(manifests)            
 
-                return result
+            return result
+
+
+
 
 
 # NOTE: TEST BLOCK, TO BE DELETED
 # TODO: DELETE COMMENTS
 #  
-# Uncomment for a test of query processor    
-# qp = QueryProcessor()
-# qp.setDbPathOrUrl(RDF_DB_URL)
-# print(qp.getEntityById('https://dl.ficlit.unibo.it/iiif/2/28429/canvas/p1'))
-# qp.setDbPathOrUrl(SQL_DB_URL)
-# print(qp.getEntityById('https://dl.ficlit.unibo.it/iiif/2/28429/canvas/p1'))
-# check library sparqldataframe
+# Supposing that all the classes developed for the project
+# are contained in the file 'impl.py', then:
 
 
+# Once all the classes are imported, first create the relational
+# database using the related source data
+# rel_path = "relational.db"
+# ann_dp = AnnotationProcessor()
+# ann_dp.setDbPathOrUrl(rel_path)
+# ann_dp.uploadData("data/annotations.csv")
 
+# met_dp = MetadataProcessor()
+# met_dp.setDbPathOrUrl(rel_path)
+# met_dp.uploadData("data/metadata.csv")
 
+# Then, create the RDF triplestore (remember first to run the
+# Blazegraph instance) using the related source data
 # grp_endpoint = "http://127.0.0.1:9999/blazegraph/sparql"
-# qp = QueryProcessor()
-
-# qp.setDbPathOrUrl(RDF_DB_URL)
-
-# p = Processor()
-# tqp = TriplestoreQueryProcessor()
-# tqp.setDbPathOrUrl("http://127.0.0.1:9999/blazegraph/sparql")
-# # print(qp.getEntityById('https://dl.ficlit.unibo.it/iiif/2/28429/canvas/p1'))
-
-# generic = GenericQueryProcessor()
-# generic.addQueryProcessor(qp)
-# generic.addQueryProcessor(p)
-# generic.addQueryProcessor(tqp)
-#print(generic.getEntityById('https://dl.ficlit.unibo.it/iiif/2/28429/canvas/p1'))
-#print(generic.getAllCanvases())
-
 # col_dp = CollectionProcessor()
 # col_dp.setDbPathOrUrl(grp_endpoint)
 # col_dp.uploadData("data/collection-1.json")
 # col_dp.uploadData("data/collection-2.json")
 
-# # In the next passage, create the query processors for both
-# # the databases, using the related classes
+# In the next passage, create the query processors for both
+# the databases, using the related classes
 # rel_qp = RelationalQueryProcessor()
 # rel_qp.setDbPathOrUrl(rel_path)
 
 # grp_qp = TriplestoreQueryProcessor()
 # grp_qp.setDbPathOrUrl(grp_endpoint)
+# entity_df = grp_qp.getEntitiesWithLabel('Raimondi, Giuseppe. Quaderno manoscritto, "Caserma Scalo : 1930-1968"')
+# entity_dt = grp_qp.getEntitiesWithLabel("Raimondi, Giuseppe. Quaderno manoscritto, \"Caserma Scalo : 1930-1968\"")
 
-# # Finally, create a generic query processor for asking
-# # about data
+# print(entity_df)
+# print(entity_dt)
+
+# Finally, create a generic query processor for asking
+# about data
 # generic = GenericQueryProcessor()
 # generic.addQueryProcessor(rel_qp)
 # generic.addQueryProcessor(grp_qp)
 
 # result_q1 = generic.getAllManifests()
+# result_q2 = generic.getEntitiesWithCreator("Dante, Alighieri")
 # result_q3 = generic.getAnnotationsToCanvas("https://dl.ficlit.unibo.it/iiif/2/28429/canvas/p1")
 
+# ciao = generic.getManifestsInCollection("https://dl.ficlit.unibo.it/iiif/19428-19425/collection")
+# print(ciao)
 
-
-
-# try1 = CollectionProcessor()
-# try1.dbPathOrUrl = "http://192.168.1.55:9999/blazegraph/sparql"
-# try1.getDbPathOrUrl()
-
-# print(try1.uploadData("collection-1.json"))
-
-
-# try2 = CollectionProcessor()
-# try2.dbPathOrUrl = "http://192.168.1.55:9999/blazegraph/sparql"
-# try2.getDbPathOrUrl()
-
-# print(try2.uploadData("collection-2.json"))
-
-
-# # create an instance of the TriplestoreQueryProcessor class
-# query_processor = TriplestoreQueryProcessor()
-
-# # call the getAllCanvases method to retrieve the canvases from the triplestore
-# entity_df = query_processor.getEntitiesWithLabel('Raimondi, Giuseppe. Quaderno manoscritto, "Caserma Scalo : 1930-1968"')
-# entity_dt = query_processor.getEntitiesWithLabel("Raimondi, Giuseppe. Quaderno manoscritto, \"Caserma Scalo : 1930-1968\"")
-# # print the dataframe containing the canvases
-# print(entity_df)
-# print(entity_dt)
-
-
-
-
-#upload_metadata= MetadataProcessor()
-#upload_metadata.setDbPathOrUrl("database.db")
-#upload_metadata.uploadData("metadata.csv")
-#upload_annotation= AnnotationProcessor()
-#upload_annotation.setDbPathOrUrl("database.db")
-#upload_annotation.uploadData("annotations.csv")
+# print("that contains")
+# a = []
+# for i in ciao:
+#     a.append(vars(i)) 
+# print(a)
